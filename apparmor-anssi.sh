@@ -10,11 +10,18 @@ CYAN='\033[0;36m'
 JAUNE='\033[1;33m'
 NORMAL='\033[0m'
 
-# Chemins
+# Chemins - Utiliser le répertoire du script, peu importe d'où il est lancé
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROFILES_DIR="${SCRIPT_DIR}/profiles/anssi"
 TARGET_DIR="/etc/apparmor.d/anssi"
 BACKUP_DIR="/etc/apparmor.d/anssi.backups"
+
+# Vérifier que le dossier des profils existe
+if [[ ! -d "$PROFILES_DIR" ]]; then
+    echo -e "${ROUGE}[ERREUR] Le dossier des profils n'existe pas : ${PROFILES_DIR}${NORMAL}"
+    echo -e "${CYAN}Assurez-vous que le script est dans le bon répertoire avec le dossier profiles/anssi/${NORMAL}"
+    exit 1
+fi
 
 # Mapping service systemd -> profil AppArmor
 declare -A SERVICE_TO_PROFILE=(
@@ -282,43 +289,23 @@ apply_profile() {
         return 1
     fi
     
-    # Extraire le nom du profil depuis le fichier (la première ligne qui commence par /)
-    local profile_name
-    profile_name=$(grep -m 1 "^/" "$target_file" | awk '{print $1}' | tr -d '{')
-    
-    if [[ -z "$profile_name" ]]; then
-        echo -e "${ROUGE}  ✗ Impossible d'extraire le nom du profil depuis le fichier.${NORMAL}"
-        return 1
-    fi
-    
-    echo -e "${CYAN}Nom du profil détecté : ${VERT}$profile_name${NORMAL}"
-    
     # Attendre un peu pour que le profil soit complètement chargé
     sleep 0.5
     
-    # Vérifier que le profil est bien chargé avant d'essayer de l'appliquer
-    if ! aa-status 2>/dev/null | grep -q "$profile_name"; then
-        echo -e "${JAUNE}  ⚠ Le profil n'apparaît pas encore dans aa-status.${NORMAL}"
-        echo -e "${CYAN}  → Tentative de rechargement...${NORMAL}"
-        apparmor_parser -r "$target_file" 2>/dev/null
-        sleep 0.5
-    fi
-    
-    # Appliquer le mode avec le nom du profil (pas le chemin du fichier)
+    # Appliquer le mode avec le chemin du fichier dans /etc/apparmor.d/anssi/
+    # AppArmor accepte le chemin du fichier pour aa-enforce/aa-complain
     echo -e "${CYAN}Application du mode ${mode^^}...${NORMAL}"
     if [[ "$mode" == "enforce" ]]; then
-        if aa-enforce "$profile_name" 2>/dev/null; then
+        if aa-enforce "$target_file" 2>/dev/null; then
             echo -e "${VERT}  ✓ Profil appliqué en mode ENFORCE.${NORMAL}"
         else
             echo -e "${ROUGE}  ✗ Erreur lors de l'application. Vérifiez avec: aa-status${NORMAL}"
         fi
     else
-        if aa-complain "$profile_name" 2>/dev/null; then
+        if aa-complain "$target_file" 2>/dev/null; then
             echo -e "${VERT}  ✓ Profil appliqué en mode COMPLAIN.${NORMAL}"
         else
             echo -e "${ROUGE}  ✗ Erreur lors de l'application. Vérifiez avec: aa-status${NORMAL}"
-            echo -e "${CYAN}  → Le profil pourrait être déjà chargé. Vérification...${NORMAL}"
-            aa-status 2>/dev/null | grep "$profile_name" || echo -e "${JAUNE}  ⚠ Profil non trouvé dans aa-status${NORMAL}"
         fi
     fi
     
@@ -373,15 +360,11 @@ main_menu() {
                     cp "$sf" "$tf"
                     
                     if apparmor_parser -r "$tf" 2>/dev/null; then
-                        # Extraire le nom du profil depuis le fichier
-                        local profile_name
-                        profile_name=$(grep -m 1 "^/" "$tf" | awk '{print $1}' | tr -d '{')
-                        
-                        if [[ -n "$profile_name" ]]; then
-                            aa-complain "$profile_name"
-                            echo -e "${VERT}✓ Appliqué $profile_name en Complain${NORMAL}"
+                        # Utiliser le chemin du fichier pour aa-complain
+                        if aa-complain "$tf" 2>/dev/null; then
+                            echo -e "${VERT}✓ Appliqué $p en Complain${NORMAL}"
                         else
-                            echo -e "${ROUGE}✗ Impossible d'extraire le nom du profil pour $p${NORMAL}"
+                            echo -e "${ROUGE}✗ Erreur lors de l'application pour $p${NORMAL}"
                         fi
                     else
                         echo -e "${ROUGE}✗ Erreur de syntaxe pour $p${NORMAL}"
