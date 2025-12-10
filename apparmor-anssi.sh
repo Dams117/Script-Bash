@@ -274,10 +274,11 @@ apply_profile() {
     
     # Vérifier la syntaxe et charger
     echo -e "${CYAN}Chargement du profil...${NORMAL}"
-    if apparmor_parser -r "$target_file"; then
+    if apparmor_parser -r "$target_file" 2>/dev/null; then
         echo -e "${VERT}  ✓ Profil chargé avec succès.${NORMAL}"
     else
         echo -e "${ROUGE}  ✗ Erreur lors du chargement (syntaxe invalide ?).${NORMAL}"
+        apparmor_parser -r "$target_file" 2>&1 | head -5
         return 1
     fi
     
@@ -292,12 +293,33 @@ apply_profile() {
     
     echo -e "${CYAN}Nom du profil détecté : ${VERT}$profile_name${NORMAL}"
     
+    # Attendre un peu pour que le profil soit complètement chargé
+    sleep 0.5
+    
+    # Vérifier que le profil est bien chargé avant d'essayer de l'appliquer
+    if ! aa-status 2>/dev/null | grep -q "$profile_name"; then
+        echo -e "${JAUNE}  ⚠ Le profil n'apparaît pas encore dans aa-status.${NORMAL}"
+        echo -e "${CYAN}  → Tentative de rechargement...${NORMAL}"
+        apparmor_parser -r "$target_file" 2>/dev/null
+        sleep 0.5
+    fi
+    
     # Appliquer le mode avec le nom du profil (pas le chemin du fichier)
     echo -e "${CYAN}Application du mode ${mode^^}...${NORMAL}"
     if [[ "$mode" == "enforce" ]]; then
-        aa-enforce "$profile_name"
+        if aa-enforce "$profile_name" 2>/dev/null; then
+            echo -e "${VERT}  ✓ Profil appliqué en mode ENFORCE.${NORMAL}"
+        else
+            echo -e "${ROUGE}  ✗ Erreur lors de l'application. Vérifiez avec: aa-status${NORMAL}"
+        fi
     else
-        aa-complain "$profile_name"
+        if aa-complain "$profile_name" 2>/dev/null; then
+            echo -e "${VERT}  ✓ Profil appliqué en mode COMPLAIN.${NORMAL}"
+        else
+            echo -e "${ROUGE}  ✗ Erreur lors de l'application. Vérifiez avec: aa-status${NORMAL}"
+            echo -e "${CYAN}  → Le profil pourrait être déjà chargé. Vérification...${NORMAL}"
+            aa-status 2>/dev/null | grep "$profile_name" || echo -e "${JAUNE}  ⚠ Profil non trouvé dans aa-status${NORMAL}"
+        fi
     fi
     
     echo -e "${VERT}Terminé pour $service.${NORMAL}"
