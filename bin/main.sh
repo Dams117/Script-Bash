@@ -1,11 +1,8 @@
 #!/bin/bash
 
-# ==============================================================================
-# SCRIPT PRINCIPAL - PROJET BASH
-# C'est le point d'entrée unique. Il charge les modules et lance le menu.
-# ==============================================================================
 
-# 1. Définition des constantes (Couleurs pour faire pro)
+
+# 1. Définition des constantes
 RED='\033[0;31m'
 GREEN='\033[0;32m'
 BLUE='\033[0;34m'
@@ -20,10 +17,10 @@ show_header() {
     echo ""
 }
 
-# 3. Importation des modules (À DECOMMENTER QUAND LES FICHIERS EXISTERONT)
-# source ./src/utils/logger.sh
-# source ./src/projet_A/script_a.sh
-# source ./src/projet_B/script_b.sh
+# 3. Importation des modules 
+source ./src/utils/logger.sh
+source ./src/projet_A/script_a.sh
+source ./src/projet_B/script_b.sh
 
 # 4. Menu Principal
 while true; do
@@ -39,12 +36,12 @@ while true; do
     case $choix in
         1)
             echo -e "${GREEN}Lancement du Projet A...${NC}"
-            # run_projet_a  <-- Appel de la fonction du module A
+            # run_projet_a 
             sleep 2
             ;;
         2)
             echo -e "${GREEN}Lancement du Projet B...${NC}"
-            # run_projet_b  <-- Appel de la fonction du module B
+            # run_projet_b 
             sleep 2
             ;;
         3)
