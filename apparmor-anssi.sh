@@ -29,7 +29,7 @@ declare -A SERVICE_TO_PROFILE=(
     ["cupsd.service"]="usr.sbin.cupsd"
     ["dhcpcd.service"]="usr.sbin.dhcpcd"
     ["NetworkManager.service"]="usr.sbin.NetworkManager"
-    ["systemd-resolved.service"]="usr.sbin.systemd-resolved"
+    ["systemd-resolved.service"]="lib.systemd.systemd-resolved"
     ["systemd-networkd.service"]="usr.sbin.systemd-networkd"
     ["snapd.service"]="usr.sbin.snapd"
     ["avahi-daemon.service"]="usr.sbin.avahi-daemon"
@@ -281,12 +281,23 @@ apply_profile() {
         return 1
     fi
     
-    # Appliquer le mode
+    # Extraire le nom du profil depuis le fichier (la première ligne qui commence par /)
+    local profile_name
+    profile_name=$(grep -m 1 "^/" "$target_file" | awk '{print $1}' | tr -d '{')
+    
+    if [[ -z "$profile_name" ]]; then
+        echo -e "${ROUGE}  ✗ Impossible d'extraire le nom du profil depuis le fichier.${NORMAL}"
+        return 1
+    fi
+    
+    echo -e "${CYAN}Nom du profil détecté : ${VERT}$profile_name${NORMAL}"
+    
+    # Appliquer le mode avec le nom du profil (pas le chemin du fichier)
     echo -e "${CYAN}Application du mode ${mode^^}...${NORMAL}"
     if [[ "$mode" == "enforce" ]]; then
-        aa-enforce "$target_file"
+        aa-enforce "$profile_name"
     else
-        aa-complain "$target_file"
+        aa-complain "$profile_name"
     fi
     
     echo -e "${VERT}Terminé pour $service.${NORMAL}"
@@ -331,17 +342,28 @@ main_menu() {
                 ;;
             a|A)
                 for i in "${!DETECTED_SERVICES[@]}"; do
-                    # Simuler le choix complain pour tous
-                    # Note: Pour simplifier, on pourrait faire une fonction dédiée "apply_all_complain"
-                    # Ici on va juste appeler aa-complain sur les fichiers copiés
                     local p="${DETECTED_PROFILES[$i]}"
                     local sf="${PROFILES_DIR}/${p}"
                     local tf="${TARGET_DIR}/${p}"
+                    
                     mkdir -p "$TARGET_DIR"
+                    backup_existing_profile "$p"
                     cp "$sf" "$tf"
-                    apparmor_parser -r "$tf"
-                    aa-complain "$tf"
-                    echo -e "${VERT}Appliqué $p en Complain${NORMAL}"
+                    
+                    if apparmor_parser -r "$tf" 2>/dev/null; then
+                        # Extraire le nom du profil depuis le fichier
+                        local profile_name
+                        profile_name=$(grep -m 1 "^/" "$tf" | awk '{print $1}' | tr -d '{')
+                        
+                        if [[ -n "$profile_name" ]]; then
+                            aa-complain "$profile_name"
+                            echo -e "${VERT}✓ Appliqué $profile_name en Complain${NORMAL}"
+                        else
+                            echo -e "${ROUGE}✗ Impossible d'extraire le nom du profil pour $p${NORMAL}"
+                        fi
+                    else
+                        echo -e "${ROUGE}✗ Erreur de syntaxe pour $p${NORMAL}"
+                    fi
                 done
                 read -rp "Terminé. Appuyez sur Entrée..."
                 ;;
