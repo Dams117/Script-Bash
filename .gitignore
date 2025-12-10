@@ -1,0 +1,11 @@
+# Fichiers systèmes et temporaires
+.DS_Store
+Thumbs.db
+*.log
+*.tmp
+*.swp
+
+# Dossiers d'éditeurs de code (VS Code, JetBrains)
+.vscode/
+.idea/
+
